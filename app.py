@@ -1,17 +1,28 @@
+import os
 import streamlit as st
+from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from pymongo import MongoClient
 from datetime import datetime
 
 # -------------------------------
-# 🔐 Load Secrets (Streamlit Cloud Safe)
+# 🔐 Load Environment (LOCAL + CLOUD SAFE)
 # -------------------------------
-try:
-    groq_api_key = st.secrets["GROQ_API_KEY"]
-    mongo_uri = st.secrets["MONGODB_URI"]
-except Exception:
-    st.error("❌ Missing secrets! Please add GROQ_API_KEY and MONGODB_URI in Streamlit Secrets.")
+load_dotenv()
+
+def get_secret(key):
+    # First try Streamlit secrets (Cloud)
+    if key in st.secrets:
+        return st.secrets[key]
+    # Then try .env (Local)
+    return os.getenv(key)
+
+groq_api_key = get_secret("GROQ_API_KEY")
+mongo_uri = get_secret("MONGODB_URI")
+
+if not groq_api_key or not mongo_uri:
+    st.error("❌ API Key or MongoDB URI missing!\n\n👉 Use .env file (local) OR Streamlit secrets (cloud).")
     st.stop()
 
 # -------------------------------
@@ -21,12 +32,12 @@ try:
     client = MongoClient(mongo_uri)
     db = client["Study"]
     collection = db["users"]
-except Exception:
-    st.error("❌ MongoDB connection failed!")
+except Exception as e:
+    st.error(f"❌ MongoDB connection failed: {e}")
     st.stop()
 
 # -------------------------------
-# 🎨 Streamlit UI
+# 🎨 UI
 # -------------------------------
 st.set_page_config(page_title="StudyBot 🎓", layout="centered")
 
@@ -34,21 +45,20 @@ st.title("🎓 StudyBot")
 st.write("Your AI-powered academic assistant")
 
 # -------------------------------
-# 👤 User Input
+# 👤 Inputs
 # -------------------------------
-user_id = st.text_input("Enter your User ID")
+user_id = st.text_input("Enter User ID")
 question = st.text_input("Ask your question")
 
 # -------------------------------
-# 📝 Prompt Template
+# 📝 Prompt
 # -------------------------------
 prompt = ChatPromptTemplate.from_messages(
     [
         (
             "system",
-            "You are StudyBot, an AI-powered academic assistant. "
-            "Answer clearly using headings, bullet points, and examples. "
-            "Explain step-by-step for concepts and format answers for exams."
+            "You are StudyBot, an academic assistant. "
+            "Answer in structured format with headings, bullet points, and examples."
         ),
         ("placeholder", "{history}"),
         ("user", "{question}")
@@ -56,34 +66,31 @@ prompt = ChatPromptTemplate.from_messages(
 )
 
 # -------------------------------
-# 🤖 LLM Setup
+# 🤖 LLM
 # -------------------------------
 try:
     llm = ChatGroq(
         api_key=groq_api_key,
-        model="llama3-8b-8192"   # stable model
+        model="llama3-8b-8192"
     )
     chain = prompt | llm
-except Exception:
-    st.error("❌ LLM initialization failed. Check API key.")
+except Exception as e:
+    st.error(f"❌ LLM Error: {e}")
     st.stop()
 
 # -------------------------------
-# 📚 Get Chat History
+# 📚 History
 # -------------------------------
 def get_history(user_id):
     chats = collection.find({"user_id": user_id}).sort("timestamp", 1)
-    history = []
-    for chat in chats:
-        history.append((chat["role"], chat["message"]))
-    return history
+    return [(chat["role"], chat["message"]) for chat in chats]
 
 # -------------------------------
-# 🚀 Chat Logic
+# 🚀 Chat
 # -------------------------------
 if st.button("Submit"):
     if not user_id or not question:
-        st.warning("⚠️ Please enter both User ID and question.")
+        st.warning("⚠️ Please enter both fields")
     else:
         try:
             history = get_history(user_id)
@@ -110,15 +117,14 @@ if st.button("Submit"):
                 "timestamp": datetime.utcnow()
             })
 
-            # Display response
             st.subheader("📖 Answer")
             st.write(response.content)
 
         except Exception as e:
-            st.error(f"❌ Error: {str(e)}")
+            st.error(f"❌ Error: {e}")
 
 # -------------------------------
-# 🕓 Chat History Display
+# 🕓 History UI
 # -------------------------------
 if user_id:
     st.subheader("🕓 Chat History")
@@ -130,4 +136,4 @@ if user_id:
             else:
                 st.markdown(f"**🤖 Bot:** {msg}")
     except:
-        st.warning("No chat history found.")
+        st.write("No history found")
