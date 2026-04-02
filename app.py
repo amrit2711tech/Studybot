@@ -1,12 +1,10 @@
 import os
+import streamlit as st
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from pymongo import MongoClient
 from datetime import datetime
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 
 # Load environment variables
 load_dotenv()
@@ -18,22 +16,16 @@ client = MongoClient(mongo_uri)
 db = client["Study"]
 collection = db["users"]
 
-# FastAPI app
-app = FastAPI()
+# Streamlit UI
+st.set_page_config(page_title="StudyBot 🎓", layout="centered")
 
-class ChatRequest(BaseModel):
-    user_id: str
-    question: str
+st.title("🎓 StudyBot")
+st.write("Your AI-powered academic assistant")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-    allow_credentials=True
-)
+# User ID input
+user_id = st.text_input("Enter your User ID")
 
-# 🎓 StudyBot Prompt
+# Prompt Template
 prompt = ChatPromptTemplate.from_messages(
     [
         (
@@ -58,45 +50,53 @@ llm = ChatGroq(
 
 chain = prompt | llm
 
-# Get Chat History
+# Get chat history
 def get_history(user_id):
     chats = collection.find({"user_id": user_id}).sort("timestamp", 1)
     history = []
-
     for chat in chats:
         history.append((chat["role"], chat["message"]))
-    
     return history
 
+# Chat input
+question = st.text_input("Ask your question:")
 
-@app.get("/")
-def home():
-    return {"message": "Welcome to StudyBot API 🚀"}
-
-
-@app.post("/chat")
-def chat(request: ChatRequest):
-    history = get_history(request.user_id)
+if st.button("Submit") and user_id and question:
+    
+    history = get_history(user_id)
 
     response = chain.invoke({
         "history": history,
-        "question": request.question
+        "question": question
     })
 
     # Save user message
     collection.insert_one({
-        "user_id": request.user_id,
+        "user_id": user_id,
         "role": "user",
-        "message": request.question,
+        "message": question,
         "timestamp": datetime.utcnow()
     })
 
-    # Save assistant message
+    # Save assistant response
     collection.insert_one({
-        "user_id": request.user_id,
+        "user_id": user_id,
         "role": "assistant",
         "message": response.content,
         "timestamp": datetime.utcnow()
     })
 
-    return {"response": response.content}
+    # Show response
+    st.subheader("📖 Answer:")
+    st.write(response.content)
+
+# Show previous chats
+if user_id:
+    st.subheader("🕓 Chat History")
+    history = get_history(user_id)
+    
+    for role, msg in history:
+        if role == "user":
+            st.markdown(f"**🧑 You:** {msg}")
+        else:
+            st.markdown(f"**🤖 Bot:** {msg}")
