@@ -7,45 +7,32 @@ from pymongo import MongoClient
 from datetime import datetime
 
 # -------------------------------
-# 🔐 Load Environment (LOCAL + CLOUD SAFE)
+# 🔐 Load .env (if exists)
 # -------------------------------
 load_dotenv()
-
-def get_secret(key):
-    # First try Streamlit secrets (Cloud)
-    if key in st.secrets:
-        return st.secrets[key]
-    # Then try .env (Local)
-    return os.getenv(key)
-
-groq_api_key = get_secret("GROQ_API_KEY")
-mongo_uri = get_secret("MONGODB_URI")
-
-if not groq_api_key or not mongo_uri:
-    st.error("❌ API Key or MongoDB URI missing!\n\n👉 Use .env file (local) OR Streamlit secrets (cloud).")
-    st.stop()
-
-# -------------------------------
-# 🧠 MongoDB Connection
-# -------------------------------
-try:
-    client = MongoClient(mongo_uri)
-    db = client["Study"]
-    collection = db["users"]
-except Exception as e:
-    st.error(f"❌ MongoDB connection failed: {e}")
-    st.stop()
 
 # -------------------------------
 # 🎨 UI
 # -------------------------------
 st.set_page_config(page_title="StudyBot 🎓", layout="centered")
-
 st.title("🎓 StudyBot")
 st.write("Your AI-powered academic assistant")
 
 # -------------------------------
-# 👤 Inputs
+# 🔑 Get API Keys (3-way fallback)
+# -------------------------------
+groq_api_key = os.getenv("GROQ_API_KEY")
+mongo_uri = os.getenv("MONGODB_URI")
+
+# If not found → ask user manually (THIS PREVENTS ERROR)
+if not groq_api_key:
+    groq_api_key = st.text_input("🔑 Enter GROQ API Key", type="password")
+
+if not mongo_uri:
+    mongo_uri = st.text_input("🗄️ Enter MongoDB URI", type="password")
+
+# -------------------------------
+# 👤 User Inputs
 # -------------------------------
 user_id = st.text_input("Enter User ID")
 question = st.text_input("Ask your question")
@@ -66,42 +53,43 @@ prompt = ChatPromptTemplate.from_messages(
 )
 
 # -------------------------------
-# 🤖 LLM
-# -------------------------------
-try:
-    llm = ChatGroq(
-        api_key=groq_api_key,
-        model="llama3-8b-8192"
-    )
-    chain = prompt | llm
-except Exception as e:
-    st.error(f"❌ LLM Error: {e}")
-    st.stop()
-
-# -------------------------------
-# 📚 History
-# -------------------------------
-def get_history(user_id):
-    chats = collection.find({"user_id": user_id}).sort("timestamp", 1)
-    return [(chat["role"], chat["message"]) for chat in chats]
-
-# -------------------------------
-# 🚀 Chat
+# 🚀 Run only if keys available
 # -------------------------------
 if st.button("Submit"):
-    if not user_id or not question:
-        st.warning("⚠️ Please enter both fields")
+
+    if not groq_api_key or not mongo_uri:
+        st.warning("⚠️ Please provide API Key and MongoDB URI first")
+    
+    elif not user_id or not question:
+        st.warning("⚠️ Please enter User ID and question")
+
     else:
         try:
-            history = get_history(user_id)
+            # MongoDB
+            client = MongoClient(mongo_uri)
+            db = client["Study"]
+            collection = db["users"]
 
+            # LLM
+            llm = ChatGroq(
+                api_key=groq_api_key,
+                model="llama3-8b-8192"
+            )
+
+            chain = prompt | llm
+
+            # Get history
+            chats = collection.find({"user_id": user_id}).sort("timestamp", 1)
+            history = [(chat["role"], chat["message"]) for chat in chats]
+
+            # Response
             with st.spinner("Thinking... 🤔"):
                 response = chain.invoke({
                     "history": history,
                     "question": question
                 })
 
-            # Save user message
+            # Save chat
             collection.insert_one({
                 "user_id": user_id,
                 "role": "user",
@@ -109,7 +97,6 @@ if st.button("Submit"):
                 "timestamp": datetime.utcnow()
             })
 
-            # Save bot response
             collection.insert_one({
                 "user_id": user_id,
                 "role": "assistant",
@@ -117,6 +104,7 @@ if st.button("Submit"):
                 "timestamp": datetime.utcnow()
             })
 
+            # Output
             st.subheader("📖 Answer")
             st.write(response.content)
 
@@ -124,16 +112,21 @@ if st.button("Submit"):
             st.error(f"❌ Error: {e}")
 
 # -------------------------------
-# 🕓 History UI
+# 🕓 History
 # -------------------------------
-if user_id:
-    st.subheader("🕓 Chat History")
+if user_id and mongo_uri:
     try:
-        history = get_history(user_id)
-        for role, msg in history:
-            if role == "user":
-                st.markdown(f"**🧑 You:** {msg}")
+        client = MongoClient(mongo_uri)
+        db = client["Study"]
+        collection = db["users"]
+
+        chats = collection.find({"user_id": user_id}).sort("timestamp", 1)
+
+        st.subheader("🕓 Chat History")
+        for chat in chats:
+            if chat["role"] == "user":
+                st.markdown(f"**🧑 You:** {chat['message']}")
             else:
-                st.markdown(f"**🤖 Bot:** {msg}")
+                st.markdown(f"**🤖 Bot:** {chat['message']}")
     except:
-        st.write("No history found")
+        pass
