@@ -1,6 +1,10 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles   # ✅ ADD THIS
+from fastapi.templating import Jinja2Templates  # ✅ ADD THIS
+
 from pydantic import BaseModel
 from pymongo import MongoClient
 from datetime import datetime
@@ -13,9 +17,6 @@ from langchain_core.prompts import ChatPromptTemplate
 groq_api_key = os.environ.get("GROQ_API_KEY")
 mongo_uri = os.environ.get("MONGODB_URI")
 
-# -------------------------------
-# 🚨 Safety Check (No Crash)
-# -------------------------------
 if not groq_api_key:
     raise Exception("❌ GROQ_API_KEY not found")
 
@@ -23,21 +24,26 @@ if not mongo_uri:
     raise Exception("❌ MONGODB_URI not found")
 
 # -------------------------------
-# 🧠 MongoDB Connection
+# 🧠 MongoDB
 # -------------------------------
-try:
-    client = MongoClient(mongo_uri)
-    db = client["Study"]
-    collection = db["users"]
-except Exception as e:
-    raise Exception(f"❌ MongoDB Error: {e}")
+client = MongoClient(mongo_uri)
+db = client["Study"]
+collection = db["users"]
 
 # -------------------------------
 # 🚀 FastAPI App
 # -------------------------------
 app = FastAPI()
 
-# CORS (for frontend)
+# ✅ STATIC FILES (IMPORTANT)
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# ✅ TEMPLATES (IMPORTANT)
+templates = Jinja2Templates(directory="templates")
+
+# -------------------------------
+# 🌐 CORS
+# -------------------------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -54,7 +60,7 @@ class ChatRequest(BaseModel):
     question: str
 
 # -------------------------------
-# 📝 Prompt Template
+# 📝 Prompt
 # -------------------------------
 prompt = ChatPromptTemplate.from_messages(
     [
@@ -67,7 +73,7 @@ prompt = ChatPromptTemplate.from_messages(
 )
 
 # -------------------------------
-# 🤖 LLM (UPDATED MODEL ✅)
+# 🤖 LLM
 # -------------------------------
 llm = ChatGroq(
     api_key=groq_api_key,
@@ -77,35 +83,32 @@ llm = ChatGroq(
 chain = prompt | llm
 
 # -------------------------------
-# 📚 Get Chat History
+# 📚 Chat History
 # -------------------------------
 def get_history(user_id):
     chats = collection.find({"user_id": user_id}).sort("timestamp", 1)
     return [(chat["role"], chat["message"]) for chat in chats]
 
 # -------------------------------
-# 🏠 Home Route
+# 🏠 HOME (TEMPLATE RENDER 🔥)
 # -------------------------------
-@app.get("/")
-def home():
-    return {"message": "StudyBot API running 🚀"}
+@app.get("/", response_class=HTMLResponse)
+async def home(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
 
 # -------------------------------
-# 💬 Chat Route
+# 💬 CHAT
 # -------------------------------
 @app.post("/chat")
 def chat(request: ChatRequest):
     try:
-        # Get history
         history = get_history(request.user_id)
 
-        # Generate response
         response = chain.invoke({
             "history": history,
             "question": request.question
         })
 
-        # Save user message
         collection.insert_one({
             "user_id": request.user_id,
             "role": "user",
@@ -113,7 +116,6 @@ def chat(request: ChatRequest):
             "timestamp": datetime.utcnow()
         })
 
-        # Save bot response
         collection.insert_one({
             "user_id": request.user_id,
             "role": "assistant",
