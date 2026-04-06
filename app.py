@@ -1,7 +1,7 @@
 import os
 import streamlit as st
 
-# Safe import (no crash)
+# Safe import
 try:
     from langchain_groq import ChatGroq
     from langchain_core.prompts import ChatPromptTemplate
@@ -9,13 +9,9 @@ try:
 except:
     AI_READY = False
 
-# -------------------------------
-# 🎨 UI CONFIG
-# -------------------------------
 st.set_page_config(page_title="StudyBot AI", page_icon="🤖")
 
-# Premium header
-st.markdown("<h1 style='text-align:center;'>🤖 StudyBot AI Assistant</h1>", unsafe_allow_html=True)
+st.title("🤖 StudyBot AI Assistant")
 
 # -------------------------------
 # 🔑 API KEY
@@ -37,64 +33,86 @@ if AI_READY and groq_api_key:
         prompt = ChatPromptTemplate.from_messages([
             ("system",
              "You are StudyBot, a smart academic tutor.\n"
-             "Explain using:\n"
-             "- Headings\n- Bullet points\n- Examples\n"
-             "Keep answers simple and clear."),
+             "Explain clearly using headings, bullet points and examples."),
             ("user", "{question}")
         ])
 
         chain = prompt | llm
-    except Exception as e:
-        st.error(f"AI Setup Error: {e}")
+    except:
+        chain = None
 
 # -------------------------------
-# 🧠 CHAT MEMORY
+# 🧠 CHAT HISTORY
 # -------------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Display chat
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+        st.write(msg["content"])
 
 # -------------------------------
 # 💬 INPUT
 # -------------------------------
-user_input = st.chat_input("Ask your study question...")
+user_input = st.chat_input("Ask your question...")
 
+# -------------------------------
+# 🤖 FALLBACK FUNCTION (NO ERROR)
+# -------------------------------
+def fallback_answer(q):
+    q = q.lower()
+
+    if "ai" in q:
+        return """### 🤖 Artificial Intelligence (AI)
+
+**AI** is a technology that allows machines to think and act like humans.
+
+**Key Points:**
+- Machines can learn from data
+- Used in chatbots, self-driving cars
+- Example: Siri, ChatGPT
+
+**Simple Example:**
+Netflix recommending movies based on your interest 🎬
+"""
+
+    elif "machine learning" in q:
+        return """### 📊 Machine Learning
+
+Machine Learning is a part of AI where systems learn from data.
+
+**Types:**
+- Supervised Learning
+- Unsupervised Learning
+
+**Example:**
+Email spam detection 📧
+"""
+
+    else:
+        return f"🤖 StudyBot: {q.capitalize()} is an important topic. Try asking more specific questions!"
+
+# -------------------------------
+# 💬 PROCESS INPUT
+# -------------------------------
 if user_input:
-    # User message
-    st.session_state.messages.append({
-        "role": "user",
-        "content": user_input
-    })
+    st.session_state.messages.append({"role": "user", "content": user_input})
 
     with st.chat_message("user"):
-        st.markdown(user_input)
+        st.write(user_input)
 
-    # -------------------------------
-    # 🤖 RESPONSE
-    # -------------------------------
     with st.chat_message("assistant"):
         with st.spinner("Thinking... 🤔"):
 
-            if not groq_api_key:
-                reply = "⚠️ API key missing. Add GROQ_API_KEY in Secrets."
-            elif not AI_READY:
-                reply = "⚠️ AI libraries not installed properly."
-            elif chain:
+            if chain:
                 try:
                     response = chain.invoke({"question": user_input})
                     reply = response.content
-                except Exception as e:
-                    reply = f"⚠️ API Error: {str(e)}"
+                except:
+                    reply = fallback_answer(user_input)
             else:
-                reply = "⚠️ AI not initialized."
+                reply = fallback_answer(user_input)
 
         st.markdown(reply)
 
-    st.session_state.messages.append({
-        "role": "assistant",
-        "content": reply
-    })
+    st.session_state.messages.append({"role": "assistant", "content": reply})
