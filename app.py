@@ -10,7 +10,6 @@ except:
     AI_READY = False
 
 st.set_page_config(page_title="StudyBot AI", page_icon="🤖")
-
 st.title("🤖 StudyBot AI Assistant")
 
 # -------------------------------
@@ -32,8 +31,11 @@ if AI_READY and groq_api_key:
 
         prompt = ChatPromptTemplate.from_messages([
             ("system",
-             "You are StudyBot, a smart academic tutor.\n"
-             "Explain clearly using headings, bullet points and examples."),
+             "You are StudyBot, an expert tutor.\n"
+             "Answer ALL questions clearly using:\n"
+             "- Headings\n- Bullet points\n- Examples\n"
+             "Subjects include: AI, ML, Maths, English, GK, Science.\n"
+             "Never say 'I don't know'. Always try to explain."),
             ("user", "{question}")
         ])
 
@@ -42,7 +44,7 @@ if AI_READY and groq_api_key:
         chain = None
 
 # -------------------------------
-# 🧠 CHAT HISTORY
+# 🧠 CHAT MEMORY
 # -------------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -52,49 +54,68 @@ for msg in st.session_state.messages:
         st.write(msg["content"])
 
 # -------------------------------
-# 💬 INPUT
+# 💬 SMART FALLBACK (UPGRADED)
 # -------------------------------
-user_input = st.chat_input("Ask your question...")
-
-# -------------------------------
-# 🤖 FALLBACK FUNCTION (NO ERROR)
-# -------------------------------
-def fallback_answer(q):
+def smart_fallback(q):
     q = q.lower()
 
-    if "ai" in q:
-        return """### 🤖 Artificial Intelligence (AI)
+    if "machine learning" in q or "ml" in q:
+        return """### 📊 Machine Learning (ML)
 
-**AI** is a technology that allows machines to think and act like humans.
+Machine Learning is a part of Artificial Intelligence.
 
-**Key Points:**
-- Machines can learn from data
-- Used in chatbots, self-driving cars
-- Example: Siri, ChatGPT
-
-**Simple Example:**
-Netflix recommending movies based on your interest 🎬
-"""
-
-    elif "machine learning" in q:
-        return """### 📊 Machine Learning
-
-Machine Learning is a part of AI where systems learn from data.
+**Definition:**
+It allows machines to learn from data and improve automatically.
 
 **Types:**
 - Supervised Learning
 - Unsupervised Learning
+- Reinforcement Learning
 
 **Example:**
-Email spam detection 📧
+Spam email detection 📧
 """
 
+    elif "ai" in q:
+        return """### 🤖 Artificial Intelligence (AI)
+
+AI enables machines to perform tasks that require human intelligence.
+
+**Uses:**
+- Chatbots
+- Self-driving cars
+- Recommendation systems
+
+**Example:**
+Netflix suggestions 🎬
+"""
+
+    elif "math" in q or "solve" in q:
+        return "📐 Please provide the full math problem so I can solve it step by step."
+
+    elif "english" in q:
+        return "📖 English help: Ask grammar, essay, or comprehension questions!"
+
     else:
-        return f"🤖 StudyBot: {q.capitalize()} is an important topic. Try asking more specific questions!"
+        return f"""### 📚 StudyBot Answer
+
+**Your Question:** {q}
+
+This topic relates to general knowledge or academics.
+
+👉 Try asking more specific like:
+- Explain {q}
+- Define {q}
+- Examples of {q}
+
+I'm here to help with all subjects! 😊
+"""
 
 # -------------------------------
-# 💬 PROCESS INPUT
+# 💬 INPUT
 # -------------------------------
+user_input = st.chat_input("Ask anything (AI, ML, Maths, GK...)")
+
 if user_input:
     st.session_state.messages.append({"role": "user", "content": user_input})
 
@@ -109,9 +130,9 @@ if user_input:
                     response = chain.invoke({"question": user_input})
                     reply = response.content
                 except:
-                    reply = fallback_answer(user_input)
+                    reply = smart_fallback(user_input)
             else:
-                reply = fallback_answer(user_input)
+                reply = smart_fallback(user_input)
 
         st.markdown(reply)
 
