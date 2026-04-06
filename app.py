@@ -8,33 +8,36 @@ from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 
 # -------------------------------
-# 🔐 Environment Variables (Render)
+# 🔐 Environment Variables
 # -------------------------------
 groq_api_key = os.environ.get("GROQ_API_KEY")
 mongo_uri = os.environ.get("MONGODB_URI")
 
 # -------------------------------
-# 🚨 Safety Check
+# 🚨 Safety Check (No Crash)
 # -------------------------------
 if not groq_api_key:
-    raise ValueError("GROQ_API_KEY is missing in environment variables")
+    raise Exception("❌ GROQ_API_KEY not found")
 
 if not mongo_uri:
-    raise ValueError("MONGODB_URI is missing in environment variables")
+    raise Exception("❌ MONGODB_URI not found")
 
 # -------------------------------
-# 🧠 MongoDB
+# 🧠 MongoDB Connection
 # -------------------------------
-client = MongoClient(mongo_uri)
-db = client["Study"]
-collection = db["users"]
+try:
+    client = MongoClient(mongo_uri)
+    db = client["Study"]
+    collection = db["users"]
+except Exception as e:
+    raise Exception(f"❌ MongoDB Error: {e}")
 
 # -------------------------------
 # 🚀 FastAPI App
 # -------------------------------
 app = FastAPI()
 
-# Allow frontend (HTML) to connect
+# CORS (for frontend)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -51,29 +54,30 @@ class ChatRequest(BaseModel):
     question: str
 
 # -------------------------------
-# 📝 Prompt
+# 📝 Prompt Template
 # -------------------------------
 prompt = ChatPromptTemplate.from_messages(
     [
         ("system",
-         "You are StudyBot. Answer clearly in structured format with headings, bullet points, and examples."),
+         "You are StudyBot, an academic assistant. "
+         "Answer clearly using headings, bullet points, and examples."),
         ("placeholder", "{history}"),
         ("user", "{question}")
     ]
 )
 
 # -------------------------------
-# 🤖 LLM
+# 🤖 LLM (UPDATED MODEL ✅)
 # -------------------------------
 llm = ChatGroq(
     api_key=groq_api_key,
-    model="llama3-8b-8192"
+    model="llama-3.1-8b-instant"
 )
 
 chain = prompt | llm
 
 # -------------------------------
-# 📚 Get History
+# 📚 Get Chat History
 # -------------------------------
 def get_history(user_id):
     chats = collection.find({"user_id": user_id}).sort("timestamp", 1)
@@ -84,7 +88,7 @@ def get_history(user_id):
 # -------------------------------
 @app.get("/")
 def home():
-    return {"message": "StudyBot API is running 🚀"}
+    return {"message": "StudyBot API running 🚀"}
 
 # -------------------------------
 # 💬 Chat Route
@@ -92,8 +96,10 @@ def home():
 @app.post("/chat")
 def chat(request: ChatRequest):
     try:
+        # Get history
         history = get_history(request.user_id)
 
+        # Generate response
         response = chain.invoke({
             "history": history,
             "question": request.question
