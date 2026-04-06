@@ -1,97 +1,105 @@
 import os
 import streamlit as st
-
-# Safe import (no crash if package issue)
-try:
-    from langchain_groq import ChatGroq
-    from langchain_core.prompts import ChatPromptTemplate
-    AI_AVAILABLE = True
-except:
-    AI_AVAILABLE = False
+from langchain_groq import ChatGroq
+from langchain_core.prompts import ChatPromptTemplate
 
 # -------------------------------
-# 🎨 UI CONFIG
+# 🎨 PAGE CONFIG
 # -------------------------------
-st.set_page_config(page_title="StudyBot", page_icon="🤖")
+st.set_page_config(page_title="StudyBot AI", page_icon="🤖", layout="centered")
+
+# -------------------------------
+# 🌙 CUSTOM STYLE (PREMIUM LOOK)
+# -------------------------------
+st.markdown("""
+<style>
+body {
+    background: linear-gradient(135deg, #0f172a, #1e293b);
+}
+.chat-bubble-user {
+    background-color: #3b82f6;
+    padding: 10px;
+    border-radius: 10px;
+    margin: 5px;
+    color: white;
+}
+.chat-bubble-bot {
+    background-color: #334155;
+    padding: 10px;
+    border-radius: 10px;
+    margin: 5px;
+    color: white;
+}
+</style>
+""", unsafe_allow_html=True)
+
 st.title("🤖 StudyBot AI Assistant")
 
 # -------------------------------
-# 🔑 GET API KEY
+# 🔑 API KEY
 # -------------------------------
 groq_api_key = os.environ.get("GROQ_API_KEY")
 
-# -------------------------------
-# 🤖 AI SETUP (SAFE)
-# -------------------------------
-chain = None
-
-if AI_AVAILABLE and groq_api_key:
-    try:
-        llm = ChatGroq(
-            api_key=groq_api_key,
-            model="llama-3.1-8b-instant"
-        )
-
-        prompt = ChatPromptTemplate.from_messages([
-            ("system",
-             "You are StudyBot. Answer using:\n"
-             "- Headings\n- Bullet points\n- Examples\n"
-             "Explain in simple language."),
-            ("user", "{question}")
-        ])
-
-        chain = prompt | llm
-    except:
-        chain = None
+if not groq_api_key:
+    st.error("⚠️ Add GROQ_API_KEY in Streamlit Secrets")
+    st.stop()
 
 # -------------------------------
-# 🧠 CHAT HISTORY
+# 🤖 AI MODEL
+# -------------------------------
+llm = ChatGroq(
+    api_key=groq_api_key,
+    model="llama-3.1-8b-instant"
+)
+
+prompt = ChatPromptTemplate.from_messages([
+    ("system",
+     "You are StudyBot, a smart academic tutor.\n"
+     "Explain answers like a teacher using:\n"
+     "- Headings\n- Bullet points\n- Examples\n"
+     "Keep language simple and clear.\n"
+     "If needed, give real-life examples."),
+    ("user", "{question}")
+])
+
+chain = prompt | llm
+
+# -------------------------------
+# 🧠 CHAT MEMORY
 # -------------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Show history
+# Show chat
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
-        st.write(msg["content"])
+        st.markdown(msg["content"])
 
 # -------------------------------
-# 💬 USER INPUT
+# 💬 INPUT
 # -------------------------------
-user_input = st.chat_input("Ask something...")
+user_input = st.chat_input("Ask your study question...")
 
 if user_input:
-    # Show user message
+    # User message
     st.session_state.messages.append({
         "role": "user",
         "content": user_input
     })
 
     with st.chat_message("user"):
-        st.write(user_input)
+        st.markdown(user_input)
 
-    # -------------------------------
-    # 🤖 GENERATE RESPONSE
-    # -------------------------------
-    if chain:
-        try:
-            response = chain.invoke({
-                "question": user_input
-            })
-            reply = response.content
-        except Exception as e:
-            reply = "⚠️ API Error: Check your GROQ API key"
-    else:
-        if not groq_api_key:
-            reply = "⚠️ GROQ_API_KEY missing. Add it in Secrets."
-        elif not AI_AVAILABLE:
-            reply = "⚠️ AI packages not installed"
-        else:
-            reply = "⚠️ AI not initialized"
-
-    # Show bot reply
+    # Bot response
     with st.chat_message("assistant"):
-        st.write(reply)
+        with st.spinner("Thinking... 🤔"):
+            try:
+                response = chain.invoke({"question": user_input})
+                reply = response.content
+            except:
+                reply = "⚠️ Error: Check API key or try again"
+
+        st.markdown(reply)
 
     st.session_state.messages.append({
         "role": "assistant",
