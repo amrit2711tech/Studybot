@@ -10,37 +10,19 @@ from pymongo import MongoClient
 from datetime import datetime
 
 # -------------------------------
-# 🔐 ENV VARIABLES (SAFE VERSION)
-# -------------------------------
-groq_api_key = os.environ.get("GROQ_API_KEY", "demo_key")
-mongo_uri = os.environ.get("MONGODB_URI", "mongodb://localhost:27017")
-
-print("GROQ KEY:", groq_api_key)
-print("MONGO URI:", mongo_uri)
-
-# -------------------------------
-# 🧠 MongoDB (SAFE CONNECT)
-# -------------------------------
-try:
-    client = MongoClient(mongo_uri)
-    db = client["Study"]
-    collection = db["users"]
-except Exception as e:
-    print("MongoDB Error:", e)
-    collection = None
-
-# -------------------------------
 # 🚀 FASTAPI APP
 # -------------------------------
 app = FastAPI()
 
-# STATIC FILES
+# -------------------------------
+# ✅ STATIC + TEMPLATE SETUP
+# -------------------------------
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# TEMPLATES
 templates = Jinja2Templates(directory="templates")
 
-# CORS
+# -------------------------------
+# 🌐 CORS
+# -------------------------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -50,6 +32,27 @@ app.add_middleware(
 )
 
 # -------------------------------
+# 🔐 ENV VARIABLES (SAFE)
+# -------------------------------
+groq_api_key = os.environ.get("GROQ_API_KEY")
+mongo_uri = os.environ.get("MONGODB_URI")
+
+print("GROQ:", groq_api_key)
+print("MONGO:", mongo_uri)
+
+# -------------------------------
+# 🧠 MongoDB (SAFE)
+# -------------------------------
+collection = None
+try:
+    if mongo_uri:
+        client = MongoClient(mongo_uri)
+        db = client["Study"]
+        collection = db["users"]
+except Exception as e:
+    print("Mongo Error:", e)
+
+# -------------------------------
 # 📦 REQUEST MODEL
 # -------------------------------
 class ChatRequest(BaseModel):
@@ -57,24 +60,27 @@ class ChatRequest(BaseModel):
     question: str
 
 # -------------------------------
-# 🏠 HOME (UI LOAD)
+# 🏠 HOME ROUTE (UI)
 # -------------------------------
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    try:
+        return templates.TemplateResponse("index.html", {"request": request})
+    except Exception as e:
+        return {"error": f"Template error: {str(e)}"}
 
 # -------------------------------
-# 💬 CHAT (SAFE VERSION)
+# 💬 CHAT ROUTE (SAFE)
 # -------------------------------
 @app.post("/chat")
 def chat(request: ChatRequest):
     try:
         question = request.question
 
-        # Dummy response (SAFE)
-        answer = f"🤖 StudyBot: You asked → {question}"
+        # Temporary response (no crash)
+        answer = f"🤖 StudyBot: {question}"
 
-        # Save in Mongo (if connected)
+        # Save if Mongo works
         if collection:
             collection.insert_one({
                 "user_id": request.user_id,
