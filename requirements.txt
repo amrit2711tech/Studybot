@@ -1,9 +1,9 @@
-numpy
 fastapi
 uvicorn
 pymongo
 python-multipart
 jinja2
+numpy
 
 langchain
 langchain-groq
