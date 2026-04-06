@@ -1,58 +1,49 @@
 import os
 import streamlit as st
-
-# Try importing AI (safe)
-try:
-    from langchain_groq import ChatGroq
-    from langchain_core.prompts import ChatPromptTemplate
-    AI_AVAILABLE = True
-except:
-    AI_AVAILABLE = False
+from langchain_groq import ChatGroq
+from langchain_core.prompts import ChatPromptTemplate
 
 # -------------------------------
 # ⚙️ CONFIG
 # -------------------------------
 st.set_page_config(page_title="StudyBot", page_icon="🤖")
-
 st.title("🤖 StudyBot AI Assistant")
 
 # -------------------------------
-# 🧠 SESSION (Chat History)
+# 🔑 GET API KEY (IMPORTANT)
+# -------------------------------
+groq_api_key = os.environ.get("GROQ_API_KEY")
+
+if not groq_api_key:
+    st.error("❌ GROQ_API_KEY not found. Add it in Streamlit Secrets.")
+    st.stop()
+
+# -------------------------------
+# 🤖 AI SETUP
+# -------------------------------
+llm = ChatGroq(
+    api_key=groq_api_key,
+    model="llama-3.1-8b-instant"
+)
+
+prompt = ChatPromptTemplate.from_messages([
+    ("system",
+     "You are StudyBot, an academic assistant.\n"
+     "Answer using:\n"
+     "- Headings\n- Bullet points\n- Examples\n"
+     "Explain in simple language."),
+    ("user", "{question}")
+])
+
+chain = prompt | llm
+
+# -------------------------------
+# 🧠 CHAT HISTORY
 # -------------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# -------------------------------
-# 🔑 GET API KEY
-# -------------------------------
-groq_api_key = os.environ.get("GROQ_API_KEY")
-
-# -------------------------------
-# 🤖 AI SETUP (SAFE)
-# -------------------------------
-if AI_AVAILABLE and groq_api_key:
-    try:
-        llm = ChatGroq(
-            api_key=groq_api_key,
-            model="llama-3.1-8b-instant"
-        )
-
-        prompt = ChatPromptTemplate.from_messages([
-            ("system",
-             "You are StudyBot. Answer clearly using:\n"
-             "- Headings\n- Bullet points\n- Examples\n- Simple language"),
-            ("user", "{question}")
-        ])
-
-        chain = prompt | llm
-    except:
-        chain = None
-else:
-    chain = None
-
-# -------------------------------
-# 💬 SHOW CHAT HISTORY
-# -------------------------------
+# Display chat
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
@@ -72,23 +63,20 @@ if user_input:
     with st.chat_message("user"):
         st.write(user_input)
 
-    # Generate response
-    if chain:
-        try:
-            response = chain.invoke({
-                "question": user_input
-            })
-            bot_reply = response.content
-        except:
-            bot_reply = "⚠️ AI error, try again"
-    else:
-        bot_reply = f"🤖 StudyBot: {user_input} (AI not configured)"
+    # AI response
+    with st.chat_message("assistant"):
+        with st.spinner("Thinking..."):
+            try:
+                response = chain.invoke({
+                    "question": user_input
+                })
+                reply = response.content
+            except Exception as e:
+                reply = f"⚠️ Error: {str(e)}"
 
-    # Show bot response
+        st.write(reply)
+
     st.session_state.messages.append({
         "role": "assistant",
-        "content": bot_reply
+        "content": reply
     })
-
-    with st.chat_message("assistant"):
-        st.write(bot_reply)
