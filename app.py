@@ -1,59 +1,27 @@
-import streamlit as st
-import requests
+from langchain_groq import ChatGroq
+from langchain_core.prompts import ChatPromptTemplate
 
-# -------------------------------
-# ⚙️ CONFIG
-# -------------------------------
-API_URL = "https://studybot-hw9k.onrender.com/chat"  # your backend
+# LLM setup
+llm = ChatGroq(
+    api_key=os.environ.get("GROQ_API_KEY"),
+    model="llama-3.1-8b-instant"
+)
 
-st.set_page_config(page_title="StudyBot", page_icon="🤖")
+prompt = ChatPromptTemplate.from_messages([
+    ("system", "You are StudyBot, explain clearly with examples."),
+    ("user", "{question}")
+])
 
-# -------------------------------
-# 🧠 SESSION STATE (Chat History)
-# -------------------------------
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+chain = prompt | llm
 
-# -------------------------------
-# 🎨 UI
-# -------------------------------
-st.title("🤖 StudyBot AI Assistant")
-
-# Display chat history
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.write(msg["content"])
-
-# -------------------------------
-# 💬 INPUT
-# -------------------------------
-user_input = st.chat_input("Ask something...")
-
-if user_input:
-    # Show user message
-    st.session_state.messages.append({"role": "user", "content": user_input})
-
-    with st.chat_message("user"):
-        st.write(user_input)
-
-    # Send to API
+@app.post("/chat")
+def chat(request: ChatRequest):
     try:
-        response = requests.post(
-            API_URL,
-            json={
-                "user_id": "user_1",
-                "question": user_input
-            }
-        )
+        response = chain.invoke({
+            "question": request.question
+        })
 
-        data = response.json()
-        bot_reply = data.get("response", "No response")
+        return {"response": response.content}
 
-    except:
-        bot_reply = "⚠️ Error connecting to backend"
-
-    # Show bot response
-    st.session_state.messages.append({"role": "assistant", "content": bot_reply})
-
-    with st.chat_message("assistant"):
-        st.write(bot_reply)
+    except Exception as e:
+        return {"response": f"Error: {str(e)}"}
