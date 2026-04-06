@@ -1,12 +1,4 @@
-fastapi
-uvicorn
-pymongo
-python-multipart
-jinja2
-numpy
-
+streamlit
 langchain
 langchain-groq
 langchain-core
-langchain-community
-streamlit
