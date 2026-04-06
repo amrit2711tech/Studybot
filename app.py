@@ -1,67 +1,59 @@
-import os
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
-from fastapi.middleware.cors import CORSMiddleware
-
-app = FastAPI()
-
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+import streamlit as st
+import requests
 
 # -------------------------------
-# 🏠 HOME (NO TEMPLATE → NO ERROR)
+# ⚙️ CONFIG
 # -------------------------------
-@app.get("/", response_class=HTMLResponse)
-async def home():
-    return """
-    <html>
-    <head>
-        <title>StudyBot</title>
-    </head>
-    <body style="font-family: Arial; text-align:center; margin-top:50px;">
-        <h1>🤖 StudyBot Running Successfully</h1>
-        <input id="input" placeholder="Ask something"/>
-        <button onclick="send()">Send</button>
-        <p id="response"></p>
+API_URL = "https://studybot-hw9k.onrender.com/chat"  # your backend
 
-        <script>
-        async function send(){
-            let msg = document.getElementById("input").value;
-
-            let res = await fetch("/chat", {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({
-                    user_id: "user1",
-                    question: msg
-                })
-            });
-
-            let data = await res.json();
-            document.getElementById("response").innerText = data.response;
-        }
-        </script>
-    </body>
-    </html>
-    """
+st.set_page_config(page_title="StudyBot", page_icon="🤖")
 
 # -------------------------------
-# 💬 CHAT (NO FAIL VERSION)
+# 🧠 SESSION STATE (Chat History)
 # -------------------------------
-@app.post("/chat")
-async def chat(data: dict):
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# -------------------------------
+# 🎨 UI
+# -------------------------------
+st.title("🤖 StudyBot AI Assistant")
+
+# Display chat history
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.write(msg["content"])
+
+# -------------------------------
+# 💬 INPUT
+# -------------------------------
+user_input = st.chat_input("Ask something...")
+
+if user_input:
+    # Show user message
+    st.session_state.messages.append({"role": "user", "content": user_input})
+
+    with st.chat_message("user"):
+        st.write(user_input)
+
+    # Send to API
     try:
-        question = data.get("question", "")
+        response = requests.post(
+            API_URL,
+            json={
+                "user_id": "user_1",
+                "question": user_input
+            }
+        )
 
-        return {
-            "response": f"🤖 StudyBot: {question}"
-        }
+        data = response.json()
+        bot_reply = data.get("response", "No response")
 
-    except Exception as e:
-        return {"response": "Error handled safely"}
+    except:
+        bot_reply = "⚠️ Error connecting to backend"
+
+    # Show bot response
+    st.session_state.messages.append({"role": "assistant", "content": bot_reply})
+
+    with st.chat_message("assistant"):
+        st.write(bot_reply)
